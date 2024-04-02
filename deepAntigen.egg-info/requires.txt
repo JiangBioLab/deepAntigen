@@ -1,0 +1,10 @@
+pygments>=2.17.2
+importlib-metadata>=7.1.0
+typing_extensions>=4.5.0
+requests>=2.20
+urllib3>=1.26.0
+deepchem>=2.6.1
+biopython>=1.83
+rdkit>=2023.9.5
+seaborn>=0.13.2
+matplotlib>=3.7.5

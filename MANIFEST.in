@@ -1,0 +1,10 @@
+recursive-include deepAntigen/antigenHLAI/load_dataset *.csv
+recursive-include deepAntigen/antigenHLAI/Weights *.pt
+recursive-include deepAntigen/antigenHLAI *.ini
+
+recursive-include deepAntigen/antigenHLAII/load_dataset *.csv
+recursive-include deepAntigen/antigenHLAII/Weights *.pt
+recursive-include deepAntigen/antigenHLAII *.ini
+
+recursive-include deepAntigen/antigenTCR/Weights *.pt
+recursive-include deepAntigen/antigenTCR *.ini
