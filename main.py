@@ -1,15 +1,18 @@
-import warnings
-warnings.filterwarnings('ignore')
-from predictAntigen.antigenHLAI import run_antigenHLAI_seq
-from predictAntigen.antigenHLAII import run_antigenHLAII_seq
-from predictAntigen.antigenTCR import run_antigenTCR_seq
-# from AntigenGCN.antigen_HLAII.run_atom import Train_AntigenGCN_Atom_for_antigen_HLAII
-# from AntigenGCN.antigen_TCR.run_atom import Train_AntigenGCN_Atom_for_antigen_TCR
-# import antigen_HLAII
-# import antigen_TCR
+from deepAntigen.antigenHLAI import run_antigenHLAI_seq
+from deepAntigen.antigenHLAII import run_antigenHLAII_seq
+from deepAntigen.antigenTCR import run_antigenTCR_seq
 
-run_antigenTCR_seq.Train('./test/test_antigenTCR/Data/sequence/meta/k_fold_dataset')
-# run_antigenTCR_seq.Inference('./test/test_antigenHLAI/Data/sequence/test.csv')
-# Train_AntigenGCN_Atom_for_antigen_HLAII('./antigen_HLAII/Data/crystal_structure/info_noredudant.csv')
-# Train_AntigenGCN_Atom_for_antigen_TCR('./antigen_TCR/Data/crystal_structure/info_noredudant.csv')
-# run_atom.Inference('./antigen_HLAI/Data/crystal_structure/sample.csv')
+from deepAntigen.antigenHLAI import run_antigenHLAI_atom
+from deepAntigen.antigenHLAII import run_antigenHLAII_atom
+from deepAntigen.antigenTCR import run_antigenTCR_atom
+
+
+df1 = run_antigenHLAI_seq.Inference('./test_antigenHLAI/Data/sequence/test.csv')
+df2 = run_antigenHLAII_seq.Inference('./test_antigenHLAII/Data/sequence/test.csv')
+df3 = run_antigenTCR_seq.Inference('./test_antigenTCR/Data/sequence/zero-shot_sample.csv')
+
+peptide_atoms1, HLAI_atoms, contact_maps1 = run_antigenHLAI_atom.Inference('./test_antigenHLAI/Data/crystal_structure/sample.csv')
+peptide_atoms2, HLAII_atoms, contact_maps2 = run_antigenHLAII_atom.Inference('./test_antigenHLAII/Data/crystal_structure/sample.csv')
+peptide_atoms3, TCR_atoms, contact_maps3 = run_antigenTCR_atom.Inference('./test_antigenTCR/Data/crystal_structure/sample.csv')
+
+print('Done!')
