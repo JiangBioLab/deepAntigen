@@ -6,91 +6,102 @@ from torch_geometric.utils.subgraph import subgraph
 from torch_geometric import data as DATA
 import torch
 import pandas as pd
-from multiprocessing import Process
-import torch.multiprocessing as mp
 import pickle
 
 class pTCR_DataSet(DATA.InMemoryDataset):
-    def __init__(self, path, num_process=8, aug=False, test=True):
+    def __init__(self, path, aug=False, test=True):
         super(pTCR_DataSet, self).__init__()
         self.AAstringList = list('ACDEFGHIKLMNPQRSTVWY')
         self.aug = aug
         self.test = test
-        rawdata = pd.read_csv(path, header=0)
-        
-        peptides = []
-        cdr3s = []
-        labels = []
+        self.rawdata = pd.read_csv(path, header=0)
+        pep_counts = self.rawdata['peptide'].value_counts()
+        tcr_counts = self.rawdata['binding_TCR'].value_counts()
 
-        for _, row in rawdata.iterrows():
-            peptide = row['peptide']
-            cdr3 = row['binding_TCR']
-            if self.test:
-                if 'label' in rawdata.columns:
-                    label = row['label']
-                else:
-                    label = -1
-            else:
-                label = row['label']
-            
-            if self.check(peptide):
-                print("peptide:"+peptide)
-                continue
+        self.high_freq_pep = list(pep_counts[pep_counts > 10].index)
+        self.high_freq_tcr = list(tcr_counts[tcr_counts > 10].index)
+        self.peptide_graph = {}
+        self.cdr3_graph = {}
 
-            if self.check(cdr3):
-                print("cdr3:"+cdr3)
-                continue
-
-            peptides.append(peptide)
-            cdr3s.append(cdr3)
-            labels.append(label)
-        
-        peptide_set = set(peptides)
-        cdr3_set = set(cdr3s)
-        
-        save_dir = path.rstrip(path.split('/')[-1])
-        filename = path.split('/')[-1].split('.')[0]
-
-        if os.path.exists(save_dir+filename+'_'+'peptide_graph.pt'):
-            self.peptide_graph = torch.load(save_dir + filename + '_' + 'peptide_graph.pt')
-        else:
-            self.peptide_graph = generateGraph(peptide_set, num_process)
-            torch.save(self.peptide_graph, '%s%s_peptide_graph.pt' % (save_dir,filename))
-
-        if os.path.exists(save_dir+filename+'_'+'cdr3_graph.pt'):
-            self.cdr3_graph = torch.load(save_dir + filename + '_' + 'cdr3_graph.pt')
-        else:
-            self.cdr3_graph = generateGraph(cdr3_set, num_process)
-            torch.save(self.cdr3_graph, '%s%s_cdr3_graph.pt' % (save_dir,filename))
-        samples = list(zip(peptides, cdr3s, labels))
-        self.samples = samples
-
-    def check(self, cdr3):
+    def check(self, seq):
         i = 0
-        for aa in cdr3:
+        for aa in seq:
             if aa not in self.AAstringList:
                 break
             else:
                 i += 1
-        if i == len(cdr3):
+        if i == len(seq):
             return False
         else:
             return True
 
+    def generateGraph(self, seq):
+        featurizer = MolGraphConvFeaturizer(use_edges=True)
+        seq_chem = Chem.MolFromSequence(seq)
+        seq_feature = featurizer._featurize(seq_chem)
+        feature, edge_index, edge_feature = seq_feature.node_features, seq_feature.edge_index, seq_feature.edge_features
+        graph = DATA.Data(x=torch.Tensor(feature), edge_index=torch.LongTensor(edge_index), edge_attr=torch.Tensor(edge_feature))
+        return graph
+
     def __len__(self):
-        return len(self.samples)
+        return len(self.rawdata)
 
     def __getitem__(self, idx):
-        peptide, cdr3, label = self.samples[idx]
-        if self.aug:
-            cdr3_graph = self.augmentation(self.cdr3_graph[cdr3])
-            peptide_graph = self.augmentation(self.peptide_graph[peptide])
+        row = self.rawdata.loc[idx]
+        peptide = row['peptide']
+        cdr3 = row['binding_TCR']
+        if self.test:
+            if 'label' in self.rawdata.columns:
+                label = row['label']
+            else:
+                label = -1
         else:
-            cdr3_graph = copy.deepcopy(self.cdr3_graph[cdr3])
-            peptide_graph = copy.deepcopy(self.peptide_graph[peptide])
+            label = row['label']
+        if self.check(peptide):
+            print("peptide:"+peptide+' is skipped.')
+            new_idx = (idx + 1) % len(self)
+            return self.__getitem__(new_idx)
+        if self.check(cdr3):
+            print("cdr3:"+cdr3+' is skipped.')
+            new_idx = (idx + 1) % len(self)
+            return self.__getitem__(new_idx)
+        if self.test:
+            if peptide in self.high_freq_pep:
+                if peptide in self.peptide_graph:
+                    peptide_graph =copy.deepcopy(self.peptide_graph[peptide])
+                else:
+                    peptide_graph = self.generateGraph(peptide)
+                    self.peptide_graph[peptide]=peptide_graph
+            else:
+                peptide_graph = self.generateGraph(peptide)
+            if cdr3 in self.high_freq_tcr:
+                if cdr3 in self.cdr3_graph:
+                    cdr3_graph = copy.deepcopy(self.cdr3_graph[cdr3])
+                else:
+                    cdr3_graph = self.generateGraph(cdr3)
+                    self.cdr3_graph[cdr3]=cdr3_graph
+            else:
+                cdr3_graph = self.generateGraph(cdr3)
+        else:
+            if peptide in self.peptide_graph:
+                peptide_graph =copy.deepcopy(self.peptide_graph[peptide])
+            else:
+                peptide_graph = self.generateGraph(peptide)
+                self.peptide_graph[peptide]=peptide_graph
+            if cdr3 in self.cdr3_graph:
+                cdr3_graph = copy.deepcopy(self.cdr3_graph[cdr3])
+            else:
+                cdr3_graph = self.generateGraph(cdr3)
+                self.cdr3_graph[cdr3]=cdr3_graph
+        if self.aug:
+            peptide_graph = self.augmentation(peptide_graph)
+            cdr3_graph = self.augmentation(cdr3_graph)
+        peptide_graph = pickle.dumps(peptide_graph)
+        cdr3_graph = pickle.dumps(cdr3_graph)
+
         return (idx, peptide, cdr3, label, peptide_graph, cdr3_graph)
-    
-    def augmentation(self, graph):
+
+    def augmentation(self,graph):
         aug_graph = copy.deepcopy(graph)
         prob = torch.rand(aug_graph.num_nodes)
         mask = prob > 0.05
@@ -105,53 +116,6 @@ def collate(batch):
     peptides = [item[1] for item in batch]
     cdr3s = [item[2] for item in batch]
     labels = [item[3] for item in batch]
-    peptide_graphs = [item[4] for item in batch]
-    cdr3_graphs = [item[5] for item in batch]
+    peptide_graphs = [pickle.loads(item[4]) for item in batch]
+    cdr3_graphs = [pickle.loads(item[5]) for item in batch]
     return idxs, peptides, cdr3s, torch.LongTensor(labels), peptide_graphs, cdr3_graphs
-
-def generateGraph(seqs,threading_num):
-    seq_set = set(seqs)
-    seq_graph = {}
-    threading_num = min(threading_num, len(seq_set))
-    seq_manager = mp.Manager()
-    seq_queue = seq_manager.list([])
-    processes = []
-    chunked = chunk_set(seq_set,threading_num)
-    for i in range(threading_num):
-        process = Process(target=generateGraph_subprocess, args=(chunked[i], seq_queue))
-        process.start()
-        processes.append(process)
-    for process in processes:
-        process.join()
-    for graph_dict in seq_queue:
-        seq_graph.update(pickle.loads(graph_dict))
-    return seq_graph
-
-def generateGraph_subprocess(seqs, queue):
-    manager = mp.Manager()
-    graphs={}
-    featurizer = MolGraphConvFeaturizer(use_edges=True)
-    for i,seq in enumerate(seqs):
-        seq_chem = Chem.MolFromSequence(seq)
-        seq_feature = featurizer._featurize(seq_chem)
-        feature, edge_index, edge_feature = seq_feature.node_features, seq_feature.edge_index, seq_feature.edge_features
-        GCNData = DATA.Data(x=torch.Tensor(feature), edge_index=torch.LongTensor(edge_index), edge_attr=torch.Tensor(edge_feature))
-        graphs[seq]=GCNData
-    graph_serialized = pickle.dumps(graphs)
-    queue.append(graph_serialized)
-
-def chunk_set(seq_set, n):
-    seq_list = list(seq_set)
-    avg_chunk_size = len(seq_list) // n
-    remainder = len(seq_list) % n
-
-    chunked = []
-    start = 0
-    for i in range(n):
-        if i!=n-1:
-            end = start + avg_chunk_size
-            chunked.append(seq_list[start:end])
-            start = end
-        else:
-            chunked.append(seq_list[start:])
-    return chunked

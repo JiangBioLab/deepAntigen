@@ -31,7 +31,6 @@ def topk(x, ratio, batch):
     perm = perm.view(-1)
     k = num_nodes.new_full((num_nodes.size(0), ), ratio)
     k = torch.min(k, num_nodes)
-
     mask = [
         torch.arange(k[i], dtype=torch.long, device=x.device) +
         i * max_num_nodes for i in range(batch_size)

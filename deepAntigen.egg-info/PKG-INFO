@@ -1,7 +1,7 @@
 Metadata-Version: 2.1
 Name: deepAntigen
-Version: 1.0.2
-Summary: Identifying T cell antigen at the atom level with graph convolutional network
+Version: 1.0.3
+Summary: Identifying T cell antigen at the atomic level with graph convolutional network
 Home-page: https://github.com/JiangBioLab/deepAntigen
 Author: JinhaoQue
 Author-email: quejinhao2021@163.com

@@ -146,10 +146,11 @@ def Inference(test_file_path,model_path='', multi_process=8):
         state = torch.load(os.path.join(folder,'Weights','seq-level_parameters.pt'))
     else:
         state = torch.load(model_path)
+
     pretrain_state_dict = state['model']
     args = state['opt']
-    dataset = pTCR_DataSet(test_file_path,num_process=multi_process)
-    dataloader = DataLoader(dataset, batch_size=args['batchsize'], collate_fn=collate, shuffle=False, pin_memory=True)
+    dataset = pTCR_DataSet(test_file_path)
+    dataloader = DataLoader(dataset, batch_size=args['batchsize'], collate_fn=collate, shuffle=False, pin_memory=True, num_workers=args['num_process'])
     model= set_model(args, pretrain_state_dict,device)
     all_peptides, all_cdr3s, all_scores, all_labels = test(dataloader, model,device)
     if 'label' in headline.columns:
@@ -173,8 +174,8 @@ def Train(k_fold_dir, config_path=''):
     device = torch.device("cuda:{}".format(0) if torch.cuda.is_available() else "cpu")
     train_path=os.path.join(k_fold_dir,'train_fold'+str(args['fold'])+'.csv')
     val_path=os.path.join(k_fold_dir,'val_fold'+str(args['fold'])+'.csv')
-    train_dataset = pTCR_DataSet(train_path,num_process=args['num_process'],aug=True,test=False)
-    val_dataset = pTCR_DataSet(val_path,num_process=args['num_process'],aug=False,test=False)
+    train_dataset = pTCR_DataSet(train_path,aug=True,test=False)
+    val_dataset = pTCR_DataSet(val_path,aug=False,test=False)
 
     start_epoch = 0
     model = DeepGCN(args)
@@ -184,15 +185,14 @@ def Train(k_fold_dir, config_path=''):
     if torch.cuda.is_available():
         cudnn.benchmark = True
     optimizer = set_optimizer(model,args)
-
+    train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=args['batchsize'],
+                              collate_fn=collate, pin_memory=True, num_workers=args['num_process'])
+    valid_dataloader = DataLoader(val_dataset, shuffle=False, batch_size=args['batchsize'],
+                          collate_fn=collate, pin_memory=True, num_workers=args['num_process'])
     for epoch in range(start_epoch+1, args['epochs']+1):
-        train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=args['batchsize'],
-                                  collate_fn=collate, pin_memory=True)
         adjust_learning_rate(args, optimizer, epoch)
         train_auroc = train_one_epoch(args, train_dataloader, model, criterion, optimizer, epoch, device)
         if epoch % args['print_freq'] == 0:
-            valid_dataloader = DataLoader(val_dataset, shuffle=True, batch_size=args['batchsize'],
-                                  collate_fn=collate, pin_memory=True)
             val_auroc = valid(valid_dataloader, model, criterion, epoch, device)
             if val_auroc > max_val_auroc:
                 max_val_auroc = val_auroc
